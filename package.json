@@ -1,0 +1,52 @@
+{
+  "name": "pip-desktop",
+  "productName": "Pip",
+  "version": "1.0.0",
+  "description": "Pip, a blue parrot who lives on your desktop and keeps your notes and checklists.",
+  "main": "main.js",
+  "engines": {
+    "node": ">=20.0.0",
+    "npm": ">=10.0.0"
+  },
+  "scripts": {
+    "start": "electron .",
+    "dist": "electron-builder",
+    "lint": "eslint main.js preload.js pet/*.js notes/*.js test/**/*.js",
+    "test": "node --test test/unit/*.test.js",
+    "test:smoke": "node --test test/smoke/*.test.js"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "electron": "^33.0.0",
+    "electron-builder": "^25.1.8",
+    "eslint": "^10.15.0",
+    "globals": "^17.14.0"
+  },
+  "build": {
+    "appId": "pt.raquel.pip",
+    "productName": "Pip",
+    "files": [
+      "main.js",
+      "preload.js",
+      "pet/**",
+      "notes/**",
+      "assets/**",
+      "package.json"
+    ],
+    "mac": {
+      "category": "public.app-category.productivity",
+      "icon": "assets/icon.png",
+      "hardenedRuntime": true,
+      "gatekeeperAssess": false
+    },
+    "win": {
+      "target": "nsis",
+      "icon": "assets/icon.png"
+    },
+    "linux": {
+      "target": "AppImage",
+      "icon": "assets/icon.png",
+      "category": "Utility"
+    }
+  }
+}

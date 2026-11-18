@@ -1,0 +1,44 @@
+@font-face{font-family:"Pixelify Sans";font-weight:600;src:url("../assets/fonts/pixelify-sans-latin-600-normal.woff2") format("woff2")}
+@font-face{font-family:"Pixelify Sans";font-weight:700;src:url("../assets/fonts/pixelify-sans-latin-700-normal.woff2") format("woff2")}
+@font-face{font-family:"Figtree";font-weight:400;src:url("../assets/fonts/figtree-latin-400-normal.woff2") format("woff2")}
+@font-face{font-family:"Figtree";font-weight:600;src:url("../assets/fonts/figtree-latin-600-normal.woff2") format("woff2")}
+
+:root{
+  --surface:#F7F9FD; --ink:#14223F; --muted:#56688A; --edge:#14223F; --blue:#1457D8; --on-blue:#fff;
+  --perch:#E9B659; --on-perch:#44300A; --shadow:#14223F;
+  --s:1; --u:1; --display:"Pixelify Sans","Courier New",monospace; --body:"Figtree",system-ui,sans-serif;
+}
+@media (prefers-color-scheme:dark){
+  :root{--surface:#151D33;--ink:#E8EEFB;--muted:#9DAECB;--edge:#6F86C4;--blue:#7FAEFF;--on-blue:#0A1630;--perch:#EDBB5E;--on-perch:#2A1C03;--shadow:#000}
+}
+*{box-sizing:border-box}
+html{font-size:calc(14px*var(--u))}
+html,body{margin:0;width:100%;height:100%;overflow:hidden;background:transparent;color:var(--ink);user-select:none;-webkit-user-select:none}
+body{font-family:var(--body);line-height:1.4}
+button{font:inherit;color:inherit;cursor:pointer}
+button:focus-visible{outline:3px solid #4a90d9;outline-offset:3px}
+[hidden]{display:none!important}
+
+/* --s = Pip size, --u = buttons and bubble size. Both are set in main.js (SCALE and UI_SCALE).
+   Window layout, top to bottom: speech bubble (78u), Pip (208s), hover buttons. */
+.bubble{position:absolute;left:12px;right:12px;bottom:calc(100vh - 78px*var(--u) + 8px*var(--u));min-height:2.6em;background:var(--surface);border:2px solid var(--edge);box-shadow:3px 3px 0 var(--shadow);padding:.45em .7em;display:grid;gap:.45em;align-content:center;z-index:3;font-size:1rem}
+.bubble::after{content:"";position:absolute;left:50%;bottom:-.65em;width:.9em;height:.9em;background:var(--surface);border-right:2px solid var(--edge);border-bottom:2px solid var(--edge);transform:translateX(-50%) rotate(45deg)}
+.bubble p{margin:0;font-weight:600;overflow-wrap:anywhere}
+.bubble-actions{display:flex;gap:.4em}
+.bubble-actions button{background:var(--perch);color:var(--on-perch);border:2px solid var(--edge);padding:.15em .6em;font-weight:600;font-size:.9rem}
+.bubble-actions #b-x{margin-left:auto;background:var(--surface);color:var(--ink);padding:.15em .55em}
+
+.pip{position:absolute;left:calc(50% - 96px*var(--s));top:calc(78px*var(--u));width:calc(192px*var(--s));height:calc(208px*var(--s));background:none;border:0;padding:0;z-index:1;cursor:grab;touch-action:none}
+.pip:active{cursor:grabbing}
+.sprite{display:block;width:100%;height:100%;background:url("../assets/sheet.png") no-repeat;background-size:calc(1536px*var(--s)) calc(1872px*var(--s));background-position:calc(var(--col,0)*-192px*var(--s)) calc(var(--row,0)*-208px*var(--s));pointer-events:none}
+
+.menu{position:absolute;left:calc(50% - 7em);right:calc(50% - 7em);top:calc(78px*var(--u) + 208px*var(--s) - 8px*var(--u));display:grid;gap:.4em;z-index:2;opacity:0;visibility:hidden;transform:translateY(-6px);transition:opacity .15s,transform .15s,visibility 0s .15s}
+.menu.show{opacity:1;visibility:visible;transform:none;transition:opacity .15s,transform .15s,visibility 0s}
+.opt{display:grid;grid-template-columns:1.9em minmax(0,1fr);gap:.55em;align-items:center;text-align:left;background:var(--surface);border:2px solid var(--edge);box-shadow:2px 2px 0 var(--shadow);padding:.3em .55em}
+.opt:hover{transform:translate(-1px,-1px);box-shadow:3px 3px 0 var(--shadow)}
+.opt .ic{width:1.9em;height:1.9em;display:grid;place-items:center;background:var(--blue);color:var(--on-blue)}
+.opt .ic svg{width:1.1em;height:1.1em}
+.opt.alt .ic{background:var(--perch);color:var(--on-perch)}
+.opt b{display:block;font:600 1rem/1.2 var(--display)}
+.opt small{display:none}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
