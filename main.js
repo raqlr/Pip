@@ -1,7 +1,7 @@
-const { app, BrowserWindow, Tray, Menu, ipcMain, screen, Notification, nativeImage, nativeTheme } = require('electron');
+const { app, BrowserWindow, Tray, Menu, ipcMain, screen, nativeImage, shell } = require('electron');
 const path = require('path');
 const fs = require('fs');
-const { validNote, normalizeNotes, normalizeSettings, reminderDueMs } = require('./lib/app-data');
+const { validNote, normalizeNotes, normalizeSettings } = require('./lib/app-data');
 
 // ===== SIZE SETTINGS: change these two numbers =====
 const SCALE = 0.7;     // Pip's size. 1 = original, 0.7 = 70%, 0.5 = half
@@ -12,6 +12,7 @@ const H = Math.round(179 * UI_SCALE + 208 * SCALE + 12);
 const IS_LINUX = process.platform === 'linux';
 const CAN_IGNORE = !IS_LINUX; // mouse click-through with forwarding is not supported on Linux
 
+if (process.env.PIP_SMOKE_USER_DATA) app.setPath('userData', process.env.PIP_SMOKE_USER_DATA);
 if (!app.requestSingleInstanceLock()) { app.quit(); }
 
 let pet = null, notesWin = null, tray = null;
@@ -34,11 +35,13 @@ function writeAtomic(file, data) {
       }
       fs.renameSync(tmp, file);
     }
+    return true;
   } catch (e) {
     try { fs.unlinkSync(tmp); } catch (cleanupError) {
       if (cleanupError.code !== 'ENOENT') console.error('temporary file cleanup failed', cleanupError);
     }
     console.error('write failed', e);
+    return false;
   }
 }
 function loadAll() {
@@ -90,8 +93,55 @@ function createPet() {
   pet.once('ready-to-show', () => {
     if (settings.visible) pet.showInactive();
     if (process.env.PIP_SMOKE_TEST === '1') {
-      console.log('PIP_ELECTRON_SMOKE_READY');
-      setTimeout(() => app.quit(), 0);
+      openNotes({ home: true });
+      notesWin.webContents.once('did-finish-load', async () => {
+        try {
+          const ready = await notesWin.webContents.executeJavaScript(
+            "document.body.dataset.notepadReady === 'true' && getComputedStyle(document.querySelector('#drag-handle')).getPropertyValue('-webkit-app-region') === 'no-drag' && getComputedStyle(document.querySelector('#case button')).getPropertyValue('-webkit-app-region') === 'no-drag' && document.querySelector('#chk[aria-label=\"Format as checkbox list\"]') && document.querySelector('#resize-handle')"
+          );
+          if (!notesWin.isMovable()) throw new Error('Notepad window is not movable.');
+            if (!notesWin.isResizable()) throw new Error('Notepad window is not resizable.');
+          const beforeDrag = notesWin.getBounds();
+          await notesWin.webContents.executeJavaScript(
+            "(() => { const handle = document.querySelector('#drag-handle'); handle.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, button: 0, pointerId: 1, screenX: 100, screenY: 100 })); document.dispatchEvent(new PointerEvent('pointermove', { bubbles: true, button: 0, pointerId: 1, screenX: 140, screenY: 130 })); document.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, button: 0, pointerId: 1, screenX: 140, screenY: 130 })); })()"
+          );
+          await new Promise(resolve => setTimeout(resolve, 250));
+          const afterDrag = notesWin.getBounds();
+          if (beforeDrag.x === afterDrag.x && beforeDrag.y === afterDrag.y) {
+            throw new Error('Dragging the Notepad handle did not move the window.');
+          }
+          const beforeResize = notesWin.getBounds();
+          await notesWin.webContents.executeJavaScript(
+            "(() => { const handle = document.querySelector('#resize-handle'); handle.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, button: 0, pointerId: 2, screenX: 100, screenY: 100 })); document.dispatchEvent(new PointerEvent('pointermove', { bubbles: true, button: 0, pointerId: 2, screenX: 150, screenY: 150 })); document.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, button: 0, pointerId: 2, screenX: 150, screenY: 150 })); })()"
+          );
+          await new Promise(resolve => setTimeout(resolve, 250));
+          const afterResize = notesWin.getBounds();
+          const resizedCase = await notesWin.webContents.executeJavaScript(
+            "({ width: document.querySelector('#case').getBoundingClientRect().width, scale: Number(document.querySelector('#stage').style.zoom) })"
+          );
+          if (afterResize.width <= beforeResize.width || afterResize.height <= beforeResize.height ||
+              resizedCase.width <= 543 || resizedCase.scale <= 1) {
+            throw new Error('Resizing the Notepad did not resize the visible notebook frame.');
+          }
+          await notesWin.webContents.executeJavaScript(
+            "(() => { const handle = document.querySelector('#resize-handle'); handle.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, button: 0, pointerId: 3, screenX: 150, screenY: 150 })); document.dispatchEvent(new PointerEvent('pointermove', { bubbles: true, button: 0, pointerId: 3, screenX: 100, screenY: 100 })); document.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, button: 0, pointerId: 3, screenX: 100, screenY: 100 })); })()"
+          );
+          await new Promise(resolve => setTimeout(resolve, 250));
+          const smallerCaseWidth = await notesWin.webContents.executeJavaScript(
+            "document.querySelector('#case').getBoundingClientRect().width"
+          );
+          if (smallerCaseWidth >= resizedCase.width) {
+            throw new Error('Shrinking the Notepad did not scale down the visible notebook frame.');
+          }
+          const notesOnly = await pet.webContents.executeJavaScript("!document.querySelector('[data-new=\"list\"]')");
+          if (!ready || !notesOnly) throw new Error('Notepad renderer, drag regions, or notes-only menu did not initialize.');
+          console.log('PIP_ELECTRON_SMOKE_READY');
+          app.quit();
+        } catch (error) {
+          console.error('Electron smoke test failed', error);
+          app.exit(1);
+        }
+      });
     }
   });
   pet.on('closed', () => { pet = null; });
@@ -144,105 +194,115 @@ function openNotes(mode) {
     notesWin.show(); notesWin.focus(); send();
     return;
   }
-  const dark = nativeTheme.shouldUseDarkColors;
+  let area = screen.getPrimaryDisplay().workArea;
   let x, y;
   if (pet) {
     const pb = pet.getBounds();
-    const d = screen.getDisplayMatching(pb).workArea;
-    x = pb.x - 480; if (x < d.x) x = Math.min(pb.x + W, d.x + d.width - 470);
-    y = Math.max(d.y + 10, Math.min(pb.y + H - 660, d.y + d.height - 660));
+    area = screen.getDisplayMatching(pb).workArea;
+    x = pb.x - 690;
+    y = pb.y + H - 760;
   }
+  const width = Math.min(670, area.width);
+  const height = Math.min(750, area.height);
+  x = Math.max(area.x, Math.min(x == null ? area.x + area.width - width - 20 : x, area.x + area.width - width));
+  y = Math.max(area.y, Math.min(y == null ? area.y + area.height - height - 20 : y, area.y + area.height - height));
   notesWin = new BrowserWindow({
-    width: 460, height: 640, minWidth: 360, minHeight: 440, x, y,
+    width, height, minWidth: Math.min(360, width), minHeight: Math.min(440, height), x, y,
     title: "Pip's Notepad",
-    backgroundColor: dark ? '#0D1322' : '#E8EEF7', autoHideMenuBar: true, show: false,
+    frame: false, transparent: true, backgroundColor: '#00000000', autoHideMenuBar: true, movable: true, resizable: true, show: false,
     webPreferences: { preload: path.join(__dirname, 'preload.js'), contextIsolation: true, nodeIntegration: false, sandbox: true }
   });
   notesWin.setMenuBarVisibility(false);
-  notesWin.loadFile(path.join(__dirname, 'notes', 'notes.html'));
+  notesWin.loadFile(path.join(__dirname, 'notes', 'notepad.html'));
   notesWin.webContents.once('did-finish-load', () => { send(); notesWin && notesWin.show(); });
-  notesWin.on('closed', () => { notesWin = null; });
+  notesWin.on('closed', () => { notesWin = null; notesDrag = null; });
 }
+
+let notesDrag = null;
+let notesResize = null;
+function isNotesDragRequest(event, x, y) {
+  return notesWin && !notesWin.isDestroyed() && event.sender === notesWin.webContents &&
+    Number.isFinite(x) && Number.isFinite(y);
+}
+ipcMain.on('notes:drag-start', (event, screenX, screenY) => {
+  if (!isNotesDragRequest(event, screenX, screenY)) return;
+  const bounds = notesWin.getBounds();
+  notesDrag = { screenX, screenY, x: bounds.x, y: bounds.y };
+});
+ipcMain.on('notes:drag-move', (event, screenX, screenY) => {
+  if (!notesDrag || !isNotesDragRequest(event, screenX, screenY)) return;
+  notesWin.setPosition(
+    Math.round(notesDrag.x + screenX - notesDrag.screenX),
+    Math.round(notesDrag.y + screenY - notesDrag.screenY)
+  );
+});
+ipcMain.on('notes:drag-end', event => {
+  if (notesWin && event.sender === notesWin.webContents) notesDrag = null;
+});
+ipcMain.on('notes:resize-start', (event, screenX, screenY) => {
+  if (!isNotesDragRequest(event, screenX, screenY)) return;
+  const bounds = notesWin.getBounds();
+  notesResize = { screenX, screenY, width: bounds.width, height: bounds.height };
+});
+ipcMain.on('notes:resize-move', (event, screenX, screenY) => {
+  if (!notesResize || !isNotesDragRequest(event, screenX, screenY)) return;
+  const area = screen.getDisplayMatching(notesWin.getBounds()).workArea;
+  const width = Math.max(360, Math.min(area.width, Math.round(notesResize.width + screenX - notesResize.screenX)));
+  const height = Math.max(440, Math.min(area.height, Math.round(notesResize.height + screenY - notesResize.screenY)));
+  notesWin.setSize(width, height);
+});
+ipcMain.on('notes:resize-end', event => {
+  if (notesWin && event.sender === notesWin.webContents) notesResize = null;
+});
+ipcMain.on('notes:minimize', event => {
+  if (notesWin && event.sender === notesWin.webContents) notesWin.minimize();
+});
+ipcMain.on('notes:toggle-maximize', event => {
+  if (!notesWin || event.sender !== notesWin.webContents) return;
+  if (notesWin.isMaximized()) notesWin.unmaximize();
+  else notesWin.maximize();
+});
+ipcMain.on('notes:close', event => {
+  if (notesWin && event.sender === notesWin.webContents) notesWin.close();
+});
 
 /* ---------- notes data from the notes window ---------- */
 ipcMain.handle('notes:get', () => notes);
-ipcMain.on('notes:upsert', (e, n) => {
-  if (!validNote(n)) return;
-  n.items = Array.isArray(n.items) ? n.items.filter(it => it && typeof it === 'object' && typeof it.id === 'string') : [];
+function storeNote(n, sender) {
+  if (!validNote(n) || n.kind !== 'note') return false;
   n.title = typeof n.title === 'string' ? n.title : '';
   n.text = typeof n.text === 'string' ? n.text : '';
-  n.date = typeof n.date === 'string' ? n.date : '';
-
-  const old = notes.find(x => x.id === n.id);
-  if (old && Array.isArray(n.items)) {
-    n.items.forEach(it => {
-      const o = (old.items || []).find(i => i.id === it.id);
-      // keep reminder state set by the reminder timer when the user did not change the time
-      if (o && o.time === it.time && !!o.remind === !!it.remind && old.date === n.date) {
-        it.fired = o.fired || it.fired;
-        it.snooze = o.snooze || 0;
-      }
-    });
-  }
   const i = notes.findIndex(x => x.id === n.id);
+  const previous = i >= 0 ? notes[i] : null;
   if (i >= 0) notes[i] = n; else notes.push(n);
-  saveNotes();
-  (n.items || []).forEach(it => { if (it.done && pet) pet.webContents.send('alert:clear', it.id); });
+  if (!saveNotes()) {
+    if (i >= 0) notes[i] = previous;
+    else notes.pop();
+    return false;
+  }
+  if (notesWin && (!sender || notesWin.webContents.id !== sender.id)) notesWin.webContents.send('notes:changed', notes);
+  return true;
+}
+ipcMain.handle('notes:save', (e, n) => {
+  if (!storeNote(n, e.sender)) throw new Error('Could not save this note. Check the app data folder and try again.');
 });
 ipcMain.on('notes:remove', (e, id) => {
   notes = notes.filter(n => n.id !== id);
   saveNotes();
-  if (pet) pet.webContents.send('alert:clear-note', id);
+  if (notesWin && notesWin.webContents.id !== e.sender.id) notesWin.webContents.send('notes:changed', notes);
 });
 ipcMain.on('notes:open', (e, mode) => openNotes(mode));
-
-/* ---------- reminders ---------- */
-const dueMs = (n, it) => reminderDueMs(n.date, it.time);
-function tick() {
-  const now = Date.now();
-  let changed = false;
-  for (const n of notes) {
-    if (n.kind !== 'list' || !Array.isArray(n.items)) continue;
-    for (const it of n.items) {
-      if (it.done || !it.remind || !it.time || it.fired) continue;
-      const t = it.snooze || dueMs(n, it);
-      if (isNaN(t) || now < t) continue;
-      it.fired = true; it.snooze = 0; changed = true;
-      if (now - t <= 45 * 60000) fire(n, it);
-    }
-  }
-  if (changed) {
-    saveNotes();
-    if (notesWin) notesWin.webContents.send('notes:changed', notes);
-  }
-}
-function fire(n, it) {
-  try {
-    if (Notification.isSupported()) new Notification({ title: 'Pip', body: `${it.time}  ${it.text || 'Reminder'}`, silent: false }).show();
-  } catch (e) {
-    console.error('notification failed', e);
-  }
-  if (pet) {
-    if (!pet.isVisible()) pet.showInactive();
-    pet.webContents.send('alert', { noteId: n.id, itemId: it.id, time: it.time, text: it.text || 'Reminder' });
-  }
-}
-ipcMain.on('alert:resolve', (e, a, action) => {
-  const n = notes.find(x => x.id === a.noteId);
-  const it = n && n.items.find(i => i.id === a.itemId);
-  if (!it) return;
-  if (action === 'done') it.done = true;
-  if (action === 'snooze') { it.snooze = Date.now() + 10 * 60000; it.fired = false; }
-  n.updated = Date.now();
-  saveNotes();
-  if (notesWin) notesWin.webContents.send('notes:changed', notes);
+ipcMain.on('app:open-external', (e, value) => {
+  let url;
+  try { url = new URL(value); } catch { return; }
+  if (!['http:', 'https:', 'mailto:', 'tel:'].includes(url.protocol)) return;
+  shell.openExternal(url.href).catch(error => console.error('external link failed', error));
 });
 
 /* ---------- tray + menus ---------- */
 function menuTemplate() {
   const login = IS_LINUX ? false : app.getLoginItemSettings().openAtLogin;
   const items = [
-    { label: 'New checklist', click: () => openNotes({ new: 'list' }) },
     { label: 'New note', click: () => openNotes({ new: 'note' }) },
     { label: 'Open my notes', click: () => openNotes({ home: true }) },
     { type: 'separator' },
@@ -291,8 +351,6 @@ app.whenReady().then(() => {
   loadAll();
   createPet();
   createTray();
-  setInterval(tick, 10000);
-  setTimeout(tick, 1500);
   function repositionForDisplays() {
     if (!pet) return;
     const d = screen.getDisplayMatching(pet.getBounds()).workArea;

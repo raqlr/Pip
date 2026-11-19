@@ -2,7 +2,7 @@
 
 const assert = require('node:assert/strict');
 const test = require('node:test');
-const { validNote, normalizeNotes, normalizeSettings, reminderDueMs } = require('../../lib/app-data');
+const { validNote, normalizeNotes, normalizeSettings } = require('../../lib/app-data');
 
 test('validates notes and their item container', () => {
   assert.equal(validNote({ id: 'n1', kind: 'note' }), true);
@@ -30,11 +30,4 @@ test('normalizes settings to safe defaults', () => {
     x: null, y: null, visible: true
   });
   assert.deepEqual(normalizeSettings(null), { x: null, y: null, visible: true });
-});
-
-test('parses valid local reminder date/time and rejects invalid values', () => {
-  assert.equal(reminderDueMs('2024-05-01', '12:34'), new Date('2024-05-01T12:34:00').getTime());
-  assert.equal(Number.isNaN(reminderDueMs('2024-02-30', '12:34')), true);
-  assert.equal(Number.isNaN(reminderDueMs('2024-05-01', '24:00')), true);
-  assert.equal(Number.isNaN(reminderDueMs('bad-date', '12:34')), true);
 });

@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; script-src 'self'; connect-src 'none'; object-src 'none'; base-uri 'none';">
+<title>Notepad</title>
+<style>
+:root{box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+*{box-sizing:border-box}
+html,body{margin:0;background:transparent}
+body{font-family:Roboto,Arial,sans-serif;min-height:100vh;overflow-x:hidden}
+#stage{width:670px;height:750px;margin:0 auto;position:relative;transform-origin:top center}
+#case{position:absolute;left:64px;top:52px;width:543px;height:650px;border-radius:14px;
+background:radial-gradient(circle at 20% 30%,#262626 0 1px,transparent 2px) 0 0/7px 7px,radial-gradient(circle at 70% 60%,#0c0c0c 0 1px,transparent 2px) 0 0/5px 5px,linear-gradient(#202020,#141414);
+box-shadow:0 0 0 1px #000,inset 0 0 0 1px #3a3a3a,0 3px 8px rgba(0,0,0,.5);-webkit-app-region:drag}
+#drag-handle{position:absolute;inset:0 0 auto;height:24px;-webkit-app-region:no-drag;cursor:grab}
+#window-controls{position:absolute;right:8px;top:6px;display:flex;gap:3px;z-index:12;-webkit-app-region:no-drag}
+.wc{width:18px;height:18px;padding:0;display:grid;place-items:center;border:1px solid #000;border-radius:4px;background:linear-gradient(#555,#292929);color:#eee;box-shadow:0 1px 0 #555,inset 0 1px 0 #666;cursor:pointer}
+.wc:hover{filter:brightness(1.25)}.wc:active{filter:brightness(.8)}
+.wc svg{width:10px;height:10px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+.wc.close{background:linear-gradient(#c94b45,#84201c);color:#fff;box-shadow:0 1px 0 #74302c,inset 0 1px 0 #df766f}
+#resize-handle{position:absolute;right:9px;bottom:8px;width:18px;height:18px;z-index:10;-webkit-app-region:no-drag;cursor:nwse-resize;
+background:linear-gradient(135deg,transparent 0 52%,#777 53% 58%,transparent 59%),linear-gradient(135deg,transparent 0 67%,#aaa 68% 73%,transparent 74%),linear-gradient(135deg,transparent 0 82%,#ddd 83% 88%,transparent 89%)}
+#case button,#case input,#case select,#ed,#list .nr{-webkit-app-region:no-drag}
+#case:before{content:"";position:absolute;inset:9px;border:1px dashed #3b3b3b;border-radius:9px;pointer-events:none}
+.row{position:absolute;left:0;right:0;display:flex;justify-content:center;gap:14px}
+#r1{top:30px}#r2{top:76px}
+.grp{display:flex;background:linear-gradient(#262626,#0e0e0e);border:1px solid #000;border-radius:6px;box-shadow:0 1px 0 #444,inset 0 1px 0 #3d3d3d;height:32px;padding:2px;gap:0}
+.grp.l{background:linear-gradient(#2c2c2c,#111)}
+.b{width:29px;height:26px;border:0;background:linear-gradient(#848484,#4f4f4f);display:flex;align-items:center;justify-content:center;color:#fff;cursor:pointer;padding:0;border-right:1px solid #333;font:700 15px Georgia,serif;text-shadow:0 1px 0 #000}
+.b:first-child{border-radius:4px 0 0 4px}.b:last-child{border-radius:0 4px 4px 0;border-right:0}
+#lnk{border-radius:4px;border-right:0}
+#new{border-radius:4px}
+.b:hover{filter:brightness(1.15)}.b:active{filter:brightness(.85)}
+.b.on{background:linear-gradient(#3a3a3a,#1c1c1c);box-shadow:inset 0 2px 4px rgba(0,0,0,.7);color:#f2a32a}
+.b.d.on{background:linear-gradient(#2a2a2a,#161616)}
+.b.on svg *{stroke:#f2a32a}
+.d{width:30px;background:linear-gradient(#303030,#161616);border-right:1px solid #000}
+.d svg *{stroke:#ddd}
+.sel{position:relative;height:32px;color:#fff;font:500 12.5px Roboto,sans-serif;background:linear-gradient(#2a2a2a,#0f0f0f);border:1px solid #000;border-radius:6px;box-shadow:0 1px 0 #444,inset 0 1px 0 #3d3d3d;text-shadow:0 1px 0 #000}
+.sel select{position:absolute;inset:0;width:100%;height:100%;opacity:0;cursor:pointer}
+.sel span{position:absolute;left:10px;top:0;line-height:30px}
+.sel i{position:absolute;right:0;top:2px;bottom:2px;width:28px;border-left:1px solid #000;box-shadow:-1px 0 0 #3a3a3a}
+.sel i:after{content:"";position:absolute;left:10px;top:9px;width:6px;height:6px;border:solid #ddd;border-width:0 2px 2px 0;transform:rotate(45deg) scale(.9)}
+#paper,#mpaper{position:absolute;left:22px;top:138px;width:500px;height:490px;background:linear-gradient(#fdfdfa,#f6f6f1);box-shadow:0 0 0 1px #aaa,inset 0 0 40px rgba(0,0,0,.09),0 2px 3px rgba(0,0,0,.5);overflow:hidden;border-bottom:3px solid #9b9b9b}
+#paper:before,#mpaper:before{content:"";position:absolute;left:45px;top:0;bottom:0;width:1px;background:#f0c4c0;box-shadow:1px 0 0 #f7dcd9;z-index:2;pointer-events:none}
+.head{position:absolute;left:0;right:0;top:0;height:63px;border-bottom:1px solid #f0c4c0;font-weight:500;font-size:12.5px;color:#222;z-index:1}
+.head b{position:absolute;top:41px;font-weight:500;transform:translateY(-100%);line-height:18px}
+.head .t{left:57px;top:49px;font-size:13px}.head .dt{right:25px;top:49px}
+#ed{position:absolute;left:0;right:0;top:63px;bottom:0;padding:0 18px 0 57px;font-size:12px;line-height:30px;color:#222;outline:0;overflow-y:auto;word-wrap:break-word;
+background:repeating-linear-gradient(transparent 0 29px,#e4e2dc 29px 30px) local;font-family:Roboto,sans-serif}
+#ed:empty:before{content:""}
+#ed a{color:#2563c9}
+#ed ul,#ed ol{margin:0;padding-left:24px}
+#ed ul{list-style:none}
+#ed li{line-height:30px;min-height:30px;position:relative}
+#ed ul li:before{content:"";position:absolute;left:-16px;top:12.5px;width:5px;height:5px;border-radius:50%;background:currentColor}
+#ed ul.cl li:before{width:11px;height:11px;left:-21px;top:8px;border-radius:3px;background:#fff;border:1.5px solid #777;cursor:pointer}
+#ed ul.cl li.done:before{background:#4a9a3f;border-color:#2c6d24}
+#ed ul.cl li.done:after{content:"";position:absolute;left:-16px;top:10px;width:3px;height:7px;border:solid #fff;border-width:0 2px 2px 0;transform:rotate(45deg);pointer-events:none}
+#ed ul.cl li.done{color:#8a8a8a;text-decoration:line-through}
+#ed ol li::marker{font-size:inherit;line-height:30px}
+#ed h3,#ed div,#ed p{margin:0;line-height:30px}
+#ed h3{font-size:1.3em}
+.ring{position:absolute;top:-17px;width:14px;height:40px;border-radius:7px;background:linear-gradient(90deg,#3a3a3a,#e8e8e8 40%,#777 70%,#222);box-shadow:0 2px 3px rgba(0,0,0,.6);z-index:5}
+.ring:after{content:"";position:absolute;left:3px;top:18px;width:8px;height:12px;border-radius:5px;background:#222;opacity:.55}
+.rib{position:absolute;left:523px;width:37px;height:26px;border:0;padding:0;color:#fff;cursor:pointer;
+clip-path:polygon(0 0,100% 0,88% 50%,100% 100%,0 100%);box-shadow:none;font-size:14px;font-weight:700;text-shadow:0 1px 0 #000;display:flex;align-items:center;justify-content:center}
+.rib.g{top:534px;background:linear-gradient(#58a24a,#2c6d24)}
+.rib.r{top:569px;background:linear-gradient(#c8312e,#7d1412)}
+.rw{position:absolute;left:523px;filter:drop-shadow(0 2px 1px rgba(0,0,0,.45))}
+#case.menu .ev{display:none}
+#case:not(.menu) .mv{display:none}
+.mg{display:flex;background:linear-gradient(#262626,#0e0e0e);border:1px solid #000;border-radius:6px;box-shadow:0 1px 0 #444,inset 0 1px 0 #3d3d3d;height:32px;padding:2px}
+.b.t{width:auto;padding:0 14px;font:500 12.5px Roboto,sans-serif}
+.srch{width:250px;height:32px;border:1px solid #000;border-radius:6px;background:linear-gradient(#0f0f0f,#1c1c1c);color:#eee;font:12.5px Roboto,sans-serif;padding:0 10px;outline:0;box-shadow:0 1px 0 #444}
+.srch::placeholder{color:#888}
+#list{position:absolute;left:0;right:0;top:63px;bottom:0;overflow-y:auto;background:repeating-linear-gradient(transparent 0 29px,#e4e2dc 29px 30px) local}
+.nr{height:60px;padding:0 18px 0 57px;cursor:pointer}
+.nr:hover{background:rgba(240,196,192,.2)}
+.nt,.ns{display:flex;justify-content:space-between;align-items:center;height:30px}
+.nt b{font-weight:500;font-size:13px;color:#222;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex:1;margin-right:10px}
+.nt span{font-size:11px;color:#8a8a8a}
+.ns em{font-style:normal;font-size:11.5px;color:#8a8a8a;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex:1;margin-right:10px}
+.del{border:0;background:none;color:#b5524d;font:500 11px Roboto,sans-serif;cursor:pointer;padding:0}
+.del.arm{color:#fff;background:#c8312e;border-radius:3px;padding:2px 6px}
+.emp{padding:0 18px 0 57px;line-height:30px;font-size:12px;color:#8a8a8a}
+.lp{position:absolute;left:50%;top:112px;transform:translateX(-50%);z-index:9;display:flex;gap:6px;background:linear-gradient(#262626,#0e0e0e);border:1px solid #000;border-radius:6px;padding:4px;box-shadow:0 4px 10px rgba(0,0,0,.6)}
+.lp[hidden]{display:none}
+.lp .b{border-radius:4px;height:32px;border-right:0}
+</style>
+</head>
+<body>
+<div id="stage">
+ <div id="case">
+  <div id="drag-handle" aria-label="Drag Notepad window" title="Drag to move Notepad"></div>
+  <div id="window-controls" aria-label="Window controls">
+   <button class="wc" id="minimize" type="button" aria-label="Minimize Notepad" title="Minimize"><svg viewBox="0 0 12 12"><path d="M2 9h8"/></svg></button>
+   <button class="wc" id="maximize" type="button" aria-label="Maximize Notepad" title="Maximize or restore"><svg viewBox="0 0 12 12"><rect x="2.5" y="2.5" width="7" height="7" rx=".5"/></svg></button>
+   <button class="wc close" id="close" type="button" aria-label="Close Notepad" title="Close"><svg viewBox="0 0 12 12"><path d="m3 3 6 6M9 3 3 9"/></svg></button>
+  </div>
+  <div class="row ev" id="r1">
+   <div class="grp l"><button class="b d" data-c="undo" data-i="undo"></button><button class="b d" data-c="redo" data-i="redo"></button></div>
+   <div class="sel" style="width:100px"><span id="sty">Free Text</span><i></i><select id="style"><option>Free Text</option><option>Heading</option><option>Paragraph</option></select></div>
+   <div class="sel" style="width:205px"><span id="fam">Roboto New Medium</span><i></i><select id="font"><option value="Roboto">Roboto New Medium</option><option value="Georgia">Georgia</option><option value="Arial">Arial</option><option value="Courier New">Courier New</option><option value="Times New Roman">Times New Roman</option></select></div>
+   <div class="sel" style="width:64px"><span id="sz">12</span><i></i><select id="size"><option>10</option><option selected>12</option><option>14</option><option>16</option><option>18</option><option>24</option></select></div>
+  </div>
+  <div class="row ev" id="r2">
+   <div class="grp"><button class="b" data-c="bold">B</button><button class="b" data-c="italic" style="font-style:italic">I</button><button class="b" data-c="underline" style="text-decoration:underline">U</button></div>
+   <div class="grp"><button class="b d on" data-c="justifyLeft" data-i="al"></button><button class="b d" data-c="justifyCenter" data-i="ac"></button><button class="b d" data-c="justifyRight" data-i="ar"></button><button class="b d" data-c="justifyFull" data-i="aj"></button></div>
+   <div class="grp"><button class="b" data-c="insertUnorderedList" data-i="ul"></button><button class="b" data-c="insertOrderedList" data-i="ol"></button><button class="b" id="chk" data-i="check" type="button" aria-label="Format as checkbox list" title="Format as checkbox list"></button></div>
+   <div class="grp"><button class="b" data-c="outdent" data-i="out"></button><button class="b" data-c="indent" data-i="ind"></button></div>
+   <div class="grp"><button class="b" id="lnk" data-i="link"></button></div>
+  </div>
+  <div id="paper" class="ev">
+   <div class="head"><b class="t">Today</b><b class="dt" id="date"></b></div>
+   <div id="ed" contenteditable="true" spellcheck="false"></div>
+  </div>
+  <div class="row mv" style="top:30px"><div class="mg"><button class="b t" id="new">＋ New</button></div><input class="srch" id="q" placeholder="Search notes" type="text"></div>
+  <div class="row mv" style="top:76px"><div class="mg" id="sg"><button class="b t on" data-s="new">Newest</button><button class="b t" data-s="old">Oldest</button><button class="b t" data-s="az">A – Z</button></div></div>
+  <div id="mpaper" class="mv"><div class="head"><b class="t">My Notes</b><b class="dt" id="cnt"></b></div><div id="list"></div></div>
+  <div class="lp ev" id="lp" hidden><input class="srch" id="lu" style="width:240px" placeholder="Paste or type a link…" type="text"><button class="b t" id="la">Add</button><button class="b t" id="lc">✕</button></div>
+  <div class="ring" style="left:82px;top:121px"></div>
+  <div class="ring" style="left:447px;top:121px"></div>
+  <div class="rw ev" style="top:534px"><button class="rib g" style="position:static" id="ok">✔</button></div>
+  <div class="rw ev" style="top:569px"><button class="rib r" style="position:static" id="no">✖</button></div>
+  <div id="resize-handle" aria-label="Resize Notepad window" title="Drag to resize Notepad"></div>
+ </div>
+</div>
+
+<script src="notepad.js"></script>
+</body>
+</html>

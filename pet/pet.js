@@ -2,7 +2,7 @@
 'use strict';
 var $ = function (s) { return document.querySelector(s); };
 var sprite = $('#sprite'), pipBtn = $('#pip'), menu = $('#menu');
-var bubble = $('#bubble'), bubbleText = $('#bubble-text'), bubbleActions = $('#bubble-actions');
+var bubble = $('#bubble'), bubbleText = $('#bubble-text');
 var RM = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 var q = new URLSearchParams(location.search);
 document.documentElement.style.setProperty('--s', parseFloat(q.get('s')) || 1);
@@ -20,7 +20,6 @@ var FLY_R = [0,1,2,3,4,5,6,7].map(function (c) { return [7, c, 75]; });
 var FLY_L = [0,1,2,3,4,5,6,7].map(function (c) { return [8, c, 75]; });
 var flyDir = 0;
 var mode = 'idle', animT = 0, lookT = 0, sleepT = 0, sayT = 0;
-var alerts = [];
 
 function frame(r, c) { sprite.style.setProperty('--row', r); sprite.style.setProperty('--col', c); }
 function stopAnim() { clearTimeout(animT); }
@@ -42,7 +41,6 @@ function idle() {
 }
 function look(idx) { mode = 'look'; stopAnim(); frame(idx < 8 ? 4 : 5, idx % 8); }
 function greet() {
-  if (alerts.length) return;
   mode = 'busy';
   if (RM) { stopAnim(); frame(1, 2); animT = setTimeout(idle, 1500); return; }
   play(JUMP, { then: function () { play(WAVE, { then: idle }); } });
@@ -59,46 +57,14 @@ function fly(dir) {
 function say(text, ms) {
   clearTimeout(sayT);
   bubbleText.textContent = text;
-  bubbleActions.hidden = true;
   bubble.hidden = false;
-  if (ms) sayT = setTimeout(function () { if (!alerts.length) bubble.hidden = true; }, ms);
+  if (ms) sayT = setTimeout(function () { bubble.hidden = true; }, ms);
 }
-function hideSay() { if (!alerts.length) bubble.hidden = true; }
-
-/* ---------- reminders ---------- */
-function showAlert() {
-  var a = alerts[0];
-  if (!a) { bubble.hidden = true; bubbleActions.hidden = true; idle(); return; }
-  clearTimeout(sayT);
-  bubbleText.textContent = a.time + '  ' + a.text + (alerts.length > 1 ? '  (+' + (alerts.length - 1) + ' more)' : '');
-  bubbleActions.hidden = false;
-  bubble.hidden = false;
-  mode = 'alert';
-  if (RM) { stopAnim(); frame(2, 2); } else play(JUMP.concat([[0, 0, 450]]), { loop: true });
-}
-function resolve(action) {
-  var a = alerts.shift();
-  if (a) window.pip.resolveAlert(a, action);
-  showAlert();
-}
-$('#b-done').addEventListener('click', function () { resolve('done'); });
-$('#b-snooze').addEventListener('click', function () { resolve('snooze'); });
-$('#b-x').addEventListener('click', function () { resolve('dismiss'); });
-window.pip.onAlert(function (a) { alerts.push(a); wake(true); showAlert(); });
-window.pip.onAlertClear(function (itemId) {
-  var n = alerts.length;
-  alerts = alerts.filter(function (a) { return a.itemId !== itemId; });
-  if (n !== alerts.length) showAlert();
-});
-window.pip.onAlertClearNote(function (noteId) {
-  var n = alerts.length;
-  alerts = alerts.filter(function (a) { return a.noteId !== noteId; });
-  if (n !== alerts.length) showAlert();
-});
+function hideSay() { bubble.hidden = true; }
 
 /* ---------- sleep ---------- */
 function fallAsleep() {
-  if (alerts.length || RM || (mode !== 'idle' && mode !== 'look')) return;
+  if (RM || (mode !== 'idle' && mode !== 'look')) return;
   mode = 'sleep';
   say('Zzz…');
   play(SLEEP_IN, { then: function () { play(SLEEP, { loop: true }); } });
@@ -135,13 +101,13 @@ function openMenu() {
   hovering = true;
   menu.classList.add('show');
   greet();
-  if (!alerts.length) say('What shall we write?');
+  say('What shall we write?');
 }
 function closeMenuSoon() {
   clearTimeout(closeT);
   closeT = setTimeout(function () {
     hovering = false; menu.classList.remove('show');
-    if (!alerts.length) hideSay();
+    hideSay();
   }, 450);
 }
 var dragging = false;
@@ -169,14 +135,14 @@ pipBtn.addEventListener('pointermove', function (e) {
   if (!down) return;
   if (!down.moved && Math.hypot(e.screenX - down.x, e.screenY - down.y) > 4) {
     down.moved = true; dragging = true; menu.classList.remove('show'); hovering = false;
-    if (!alerts.length) { say('Wheee!'); fly(flyDir || 1); }
+    say('Wheee!'); fly(flyDir || 1);
   }
   if (down.moved) {
     window.pip.dragMove(e.screenX, e.screenY);
     var dx = e.screenX - lastDX;
     if (Math.abs(dx) >= 3) {
       lastDX = e.screenX;
-      if (!alerts.length) fly(dx > 0 ? 1 : -1);
+      fly(dx > 0 ? 1 : -1);
     }
   }
 });
@@ -185,7 +151,7 @@ function endDrag(e) {
   var moved = down.moved; down = null; dragging = false;
   if (pipBtn.hasPointerCapture(e.pointerId)) pipBtn.releasePointerCapture(e.pointerId);
   window.pip.dragEnd();
-  if (moved) { flyDir = 0; if (!alerts.length) { idle(); hideSay(); } }
+  if (moved) { flyDir = 0; idle(); hideSay(); }
   else greet();
 }
 pipBtn.addEventListener('pointerup', endDrag);
@@ -196,7 +162,7 @@ document.querySelectorAll('[data-new]').forEach(function (b) {
   b.addEventListener('click', function () {
     window.pip.openNotes({ new: b.getAttribute('data-new') });
     menu.classList.remove('show'); hovering = false; hideSay();
-    if (!alerts.length && !RM) { mode = 'busy'; play(JUMP, { then: idle }); }
+    if (!RM) { mode = 'busy'; play(JUMP, { then: idle }); }
   });
 });
 
